@@ -12,17 +12,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""The module implements the Nuage VRS operation."""
+"""The module implements the Nuage VRS deployment."""
 
 from __future__ import with_statement
 
 
-class OperationVRS(object):
-    """Class that implements operation of VRS on KVM servers ."""
+class DeployVRS(object):
+    """Class that implements deployment of VRS on KVM servers ."""
 
     def __init__(self, arg):
         """Constructor."""
-        super(OperationVRS, self).__init__()
+        super(DeployVRS, self).__init__()
         self.arg = arg
 
     def _read_config(self):
