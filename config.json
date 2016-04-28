@@ -1,0 +1,10 @@
+{
+    "active_controller": "172.28.1.1",
+    "standby_controller": "172.28.1.1",
+    "network_uplink_intf": "bond1.102",
+    "rpm":
+    [
+        "nuage-metadata-agent-3.2.6-232.el7.x86_64.rpm",
+        "nuage-openvswitch-3.2.6-232.el7.x86_64.rpm"
+    ]
+}
