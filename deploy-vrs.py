@@ -56,13 +56,14 @@ class JsshProcess(multiprocessing.Process):
         index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
         if (index == 0):
             child.sendline('yes')
-            child.expect('.*ssword:')
             i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
             if i == 0:
                 print 'ERROR!'
                 print 'SSH could not login. Here is what SSH said:'
                 print child.before, child.after
                 return None
+            else:
+                child.sendline(self.server.password)
         elif index == 1:
             child.sendline(self.server.password)
         else:
@@ -112,7 +113,7 @@ class DeployVRS(object):
         """Exec command on the servers."""
         p = JsshProcess(server, cmd)
         p.start()
-        print "Spaw the async ssh process success."
+        print "Spaw the async ssh process on server %s success." % (server)
 
 
 def print_help():
@@ -123,7 +124,7 @@ def print_help():
 def main():
     """Main entry."""
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hc:v", ["command"])
+        opts, args = getopt.getopt(sys.argv[1:], "hc:v", ["command="])
     except getopt.GetoptError, err:
         print str(err)
         print_help()
@@ -136,7 +137,6 @@ def main():
             verbose = True
         elif o in ("-c", "--command"):
             command = a
-            print command
         elif o in ("-h", "--help"):
             print_help()
             sys.exit()
