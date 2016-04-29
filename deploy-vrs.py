@@ -83,7 +83,7 @@ class JsshProcess(multiprocessing.Process):
             return None
         child.expect(pexpect.EOF)
         if self.verbose:
-            print child.before
+            print "Runing command %s on server %s with result %s." % (self.cmd, self.server, child.before)
 
         return child.before
 
