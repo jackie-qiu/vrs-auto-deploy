@@ -246,6 +246,13 @@ class DeployVRS(object):
             print cmd
         p.run_ssh(cmd)
 
+        print "Restart openstack-nova-compute service on %s ..." % (server)
+
+        cmd = "/bin/systemctl restart openstack-nova-compute.service"
+        if self.verbose:
+            print cmd
+        p.run_ssh(cmd)
+
         print "Restart nuage-openvsiwtch service on %s ..." % (server)
 
         cmd = "/bin/systemctl restart openvswitch.service"
