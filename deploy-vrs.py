@@ -251,11 +251,19 @@ class DeployVRS(object):
 
     def uninstall(self, server, cmd):
         """Uninstall VRS on the servers."""
+        p = JsshProcess(server, "", self.verbose)
+
+        cli = "rpm -e nuage*"
+        if(self.verbose):
+            print cli
+        p.run_ssh(cli)
         return True
 
     def upgrade(self, server, cmd):
         """Upgrate VRS on the servers."""
-        return True
+        self.uninstall(server, cmd)
+
+        return self.install(server, cmd)
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
