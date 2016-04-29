@@ -153,19 +153,37 @@ class DeployVRS(object):
     def check(self, server, cmd):
         """Check the Nuage VRS status of the server."""
         p = JsshProcess(server, "", self.verbose)
+        if(self.verbose):
+            print "Check status of file /etc/nova/nova.conf on %s." % (server)
 
-        print "Check status of file /etc/nova/nova.conf on %s ..." % (server)
         cmd = "ls /etc/nova/nova.conf"
+        if(self.verbose):
+            print cmd
+        result = p.run_ssh(cmd)
+        if("No such file or directory" in result):
+            print "/etc/nova/nova.conf doesn't exist on server %s." % (server)
+            return False
 
-        print "Check status of file /etc/default/openvswitch on %s ..." % (server)
+        if(self.verbose):
+            print "Check status of file /etc/default/openvswitch on %s." % (server)
+
         cmd = "ls /etc/default/openvswitch"
+        if(self.verbose):
+            print cmd
+        result = p.run_ssh(cmd)
+        if("No such file or directory" in result):
+            print "/etc/default/openvswitch doesn't exist on server %s." % (server)
+            return False
 
-        print "Check status of nuage-openvsiwtch service on %s ..." % (server)
+        if(self.verbose):
+            print "Check status of nuage-openvsiwtch service on %s ..." % (server)
+
         cmd = "/bin/systemctl status openvswitch.service"
         if(self.verbose):
             print cmd
         result = p.run_ssh(cmd)
         if(not("status=0/SUCCESS" in result)):
+            print "openvswitch.service status failed on server %s." % (server)
             return False
 
         return True
@@ -297,6 +315,11 @@ def main():
 
     for server in failed_servers:
         print "Execute command %s failed on server %s" % (command, server)
+
+    with open('failed_servers.txt', 'w') as f:
+        f.write('\n'.join(str(server)[:] for server in failed_servers))
+
+    f.close()
 
 
 if __name__ == "__main__":

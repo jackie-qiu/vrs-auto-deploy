@@ -8,9 +8,7 @@ if __name__ == "__main__":
         server = "172.16.169.%s:root:As_9sx_X" % (i)
         servers.append(server)
 
-    server_list = '\n'.join(str(server)[:] for server in servers)
-
     with open('server.txt', 'w') as f:
-        f.write(server_list)
+        f.write('\n'.join(str(server)[:] for server in servers))
 
     f.close()
