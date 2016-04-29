@@ -29,6 +29,7 @@ except ImportError:
 
 
 class Server(object):
+
     """The Server that deploy VRS."""
 
     def __init__(self, host, user_name, password):
@@ -43,13 +44,15 @@ class Server(object):
 
 
 class JsshProcess(multiprocessing.Process):
+
     """Class that implements ssh to the KVM servers ."""
 
-    def __init__(self, server, cmd):
+    def __init__(self, server, cmd, verbose):
         """Constructor."""
         multiprocessing.Process.__init__(self)
         self.server = server
         self.cmd = cmd
+        self.verbose = verbose
 
     def run(self):
         """Run cmd in async thread."""
@@ -78,13 +81,18 @@ class JsshProcess(multiprocessing.Process):
             print child.before, child.after
             return None
         child.expect(pexpect.EOF)
-        print child.before
+        if(self.verbose):
+            print child.before
+
+        return child.before
 
     def run_scp(self, filename, path):
         """Run scp command."""
         dst = self.server.user_name + "@" + self.server.host + ":" + path
         cli = "scp " + filename + " " + dst
-        print cli
+        if(self.verbose):
+            print cli
+
         child = pexpect.spawn(cli)
         index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
         if (index == 0):
@@ -105,10 +113,14 @@ class JsshProcess(multiprocessing.Process):
             print child.before, child.after
             return None
         child.expect(pexpect.EOF)
-        print child.before
+        if(self.verbose):
+            print child.before
+
+        return child.before
 
 
 class DeployVRS(object):
+
     """Class that implements deployment of VRS on KVM servers ."""
 
     def __init__(self, config_file, verbose):
@@ -138,21 +150,41 @@ class DeployVRS(object):
 
         return servers
 
+    def check(self, server, cmd):
+        """Check the Nuage VRS status of the server."""
+        p = JsshProcess(server, "", self.verbose)
+
+        print "Check status of file /etc/nova/nova.conf on %s ..." % (server)
+        cmd = "ls /etc/nova/nova.conf"
+
+        print "Check status of file /etc/default/openvswitch on %s ..." % (server)
+        cmd = "ls /etc/default/openvswitch"
+
+        print "Check status of nuage-openvsiwtch service on %s ..." % (server)
+        cmd = "/bin/systemctl status openvswitch.service"
+        if(self.verbose):
+            print cmd
+        result = p.run_ssh(cmd)
+        if(not("status=0/SUCCESS" in result)):
+            return False
+
+        return True
+
     def install(self, server, cmd):
         """Install VRS to the servers."""
-        p = JsshProcess(server, "")
+        p = JsshProcess(server, "", self.verbose)
 
-        if(self.verbose):
-            print "Yum install dependent rpm package ..."
+        print "Yum install dependent rpm package ..."
 
         cmd = "yum install -y python-novaclient libvirt \
                python-twisted-core perl-JSON qemu-kvm vconfig \
                perl-Sys-Syslog.x86_64 protobuf-c.x86_64 \
                python-setproctitle.x86_64"
+        if(self.verbose):
+            print cmd
         p.run_ssh(cmd)
 
-        if(self.verbose):
-            print "Scp nuage VRS rpm packages to %s ..." % (server)
+        print "Scp nuage VRS rpm packages to %s ..." % (server)
         vrs_config = self.read_vrs_config()
 
         scp_filename = ""
@@ -160,57 +192,65 @@ class DeployVRS(object):
             scp_filename = scp_filename + rpm_name + " "
         p.run_scp(scp_filename, "/root/")
 
-        if(self.verbose):
-            print "Install nuage VRS rpm packages to %s ..." % (server)
+        print "Install nuage VRS rpm packages to %s ..." % (server)
         cmd = ""
         for rpm_name in vrs_config['rpm']:
             cmd = cmd + "/root/" + rpm_name + " "
-        print cmd
+        if(self.verbose):
+            print cmd
         p.run_ssh("rpm -ivh " + cmd)
 
-        if(self.verbose):
-            print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." \
-                  % (server)
+        print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." % (server)
         cmd = "sed -i 's/\^ovs_bridge\.\*/ovs_bridge=alubr0/' /etc/nova/nova.conf"
-        print cmd
-        p.run_ssh(cmd)
-
         if(self.verbose):
-            print "Setting /etc/default/openvswitch config file on server %s..." % (server)
-        cmd = "echo ACTIVE_CONTROLLER=%s >> /etc/default/openvswitch;\
-               echo STANDBY_CONTROLLER=%s >> /etc/default/openvswitch" \
-               % (vrs_config['active_controller'], vrs_config['standby_controller'])
-        print cmd
-        p.run_ssh(cmd)
-        cmd = "sed -i 's/\^NETWORK_UPLINK_INTF\.\*/NETWORK_UPLINK_INTF=%s/' /etc/default/openvswitch" % (vrs_config['network_uplink_intf'])
-        print cmd
+            print cmd
         p.run_ssh(cmd)
 
+        print "Setting /etc/default/openvswitch config file on server %s..." % (server)
+        cmd = "sed -i 's/\^NETWORK_UPLINK_INTF\.\*/NETWORK_UPLINK_INTF=%s/' /etc/default/openvswitch; \
+               sed -i 's/\^ACTIVE_CONTROLLER\.\*/ACTIVE_CONTROLLER=%s/' /etc/default/openvswitch;\
+               sed -i 's/\^STANDBY_CONTROLLER\.\*/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch"\
+               % (vrs_config['network_uplink_intf'], vrs_config['active_controller'], vrs_config['standby_controller'])
         if(self.verbose):
-            print "Restart nuage-openvsiwtch service on %s ..." % (server)
-
-        cmd = "/bin/systemctl restart  openvswitch.service"
+            print cmd
         p.run_ssh(cmd)
+
+        print "Restart nuage-openvsiwtch service on %s ..." % (server)
+
+        cmd = "/bin/systemctl restart openvswitch.service"
+        if(self.verbose):
+            print cmd
+        p.run_ssh(cmd)
+
+        print "Check status of nuage-openvsiwtch service on %s ..." % (server)
+        cmd = "/bin/systemctl status openvswitch.service"
+        if(self.verbose):
+            print cmd
+        result = p.run_ssh(cmd)
+        if("status=0/SUCCESS" in result):
+            return True
+        return False
 
     def uninstall(self, server, cmd):
         """Uninstall VRS on the servers."""
-        pass
+        return True
 
     def upgrade(self, server, cmd):
         """Upgrate VRS on the servers."""
-        pass
+        return True
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
-        p = JsshProcess(server, cmd)
+        p = JsshProcess(server, cmd, self.verbose)
         p.start()
         if(self.verbose):
             print "Spaw ssh command %s on server %s success." % (cmd, server)
+        return True
 
 
 def print_help():
     """Print help."""
-    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec]]'
+    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]]'
 
 
 def main():
@@ -242,14 +282,22 @@ def main():
         func = deploy.uninstall
     elif(command == "upgrade"):
         func = deploy.upgrade
+    elif(command == "check"):
+        func = deploy.check
     else:
         func = deploy.exec_cmd
 
     servers = deploy.read_servers()
     for server in servers:
-        if(verbose):
-            print "Exec %s command on server %s" % (command, server)
-        func(server, command)
+        failed_servers = []
+        print "Exec %s command on server %s" % (command, server)
+        result = func(server, command)
+        if(not result):
+            failed_servers.append(server)
+
+    for server in failed_servers:
+        print "Execute command %s failed on server %s" % (command, server)
+
 
 if __name__ == "__main__":
     main()
