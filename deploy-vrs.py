@@ -238,9 +238,9 @@ class DeployVRS(object):
 
         print "Setting /etc/default/openvswitch config file on server %s..." % (server)
         cmd = "sed -i 's/\^NETWORK_UPLINK_INTF\.\*/NETWORK_UPLINK_INTF=%s/' /etc/default/openvswitch; \
-               sed -i 's/\^ACTIVE_CONTROLLER\.\*/ACTIVE_CONTROLLER=%s/' /etc/default/openvswitch;\
-               sed -i 's/\^STANDBY_CONTROLLER\.\*/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch;\
-               sed -i 's/\^BRIDGE_MTU\.\*/BRIDGE_MTU=1600/' /etc/default/openvswitch;"\
+               sed -i 's/^.*ACTIVE_CONTROLLER=.*$/ACTIVE_CONTROLLER=%s/' /etc/default/openvswitch;\
+               sed -i 's/^.*STANDBY_CONTROLLER=.*$/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch;\
+               sed -i 's/^.*BRIDGE_MTU=.*$/BRIDGE_MTU=1600/' /etc/default/openvswitch"\
                % (vrs_config['network_uplink_intf'], vrs_config['active_controller'], vrs_config['standby_controller'])
         if self.verbose:
             print cmd
