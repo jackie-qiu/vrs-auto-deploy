@@ -258,7 +258,7 @@ class DeployVRS(object):
         if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
-        if("status=0/SUCCESS" in result):
+        if "status=0/SUCCESS" in result:
             return True, ""
         return False, result
 
@@ -276,9 +276,16 @@ class DeployVRS(object):
             print cli
         result = p.run_ssh(cli)
         nuage_rpms = result.split('\r\n')
+        uninstalled_rpms = []
         for rpms in nuage_rpms:
-            if "nuage" not in rpms:
-                pass
+            if "nuage-metadata" in rpms:
+                uninstalled_rpms[0:0] = rpms
+                continue
+            if "nuage-openvswitch" in rpms:
+                uninstalled_rpms.append(rpms)
+                continue
+
+        for rpms in uninstalled_rpms:
             cli = "rpm -e " + rpms
             if self.verbose:
                 print cli
