@@ -279,11 +279,10 @@ class DeployVRS(object):
         uninstalled_rpms = []
         for rpms in nuage_rpms:
             if "nuage-metadata" in rpms:
-                uninstalled_rpms[0:0] = rpms
+                uninstalled_rpms.insert(0, rpms)
                 continue
-            if "nuage-openvswitch" in rpms:
+            if "nuage" in rpms:
                 uninstalled_rpms.append(rpms)
-                continue
 
         for rpms in uninstalled_rpms:
             cli = "rpm -e " + rpms
