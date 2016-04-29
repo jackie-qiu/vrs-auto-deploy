@@ -62,8 +62,9 @@ class JsshProcess(multiprocessing.Process):
         """Run ssh command."""
         cli = self.server.user_name + "@" + self.server.host + " " + cmd
         child = pexpect.spawn('ssh %s' % cli)
+        # child.logfile_send = sys.stdout
         index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
-        if (index == 0):
+        if index == 0:
             child.sendline('yes')
             i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
             if i == 0:
@@ -81,7 +82,7 @@ class JsshProcess(multiprocessing.Process):
             print child.before, child.after
             return None
         child.expect(pexpect.EOF)
-        if(self.verbose):
+        if self.verbose:
             print child.before
 
         return child.before
@@ -90,12 +91,12 @@ class JsshProcess(multiprocessing.Process):
         """Run scp command."""
         dst = self.server.user_name + "@" + self.server.host + ":" + path
         cli = "scp " + filename + " " + dst
-        if(self.verbose):
+        if self.verbose:
             print cli
 
         child = pexpect.spawn(cli)
         index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
-        if (index == 0):
+        if index == 0:
             child.sendline('yes')
             i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
             if i == 0:
@@ -113,7 +114,7 @@ class JsshProcess(multiprocessing.Process):
             print child.before, child.after
             return None
         child.expect(pexpect.EOF)
-        if(self.verbose):
+        if self.verbose:
             print child.before
 
         return child.before
@@ -153,40 +154,63 @@ class DeployVRS(object):
     def check(self, server, cmd):
         """Check the Nuage VRS status of the server."""
         p = JsshProcess(server, "", self.verbose)
-        if(self.verbose):
+        if self.verbose:
             print "Check status of file /etc/nova/nova.conf on %s." % (server)
 
         cmd = "ls /etc/nova/nova.conf"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
-        if("No such file or directory" in result):
-            print "/etc/nova/nova.conf doesn't exist on server %s." % (server)
-            return False
+        if "nova.conf" not in result:
+            error_message = "/etc/nova/nova.conf doesn't exist on server %s." % (server)
+            print error_message
+            return False, error_message
 
-        if(self.verbose):
+        if self.verbose:
             print "Check status of file /etc/default/openvswitch on %s." % (server)
 
         cmd = "ls /etc/default/openvswitch"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
-        if("No such file or directory" in result):
-            print "/etc/default/openvswitch doesn't exist on server %s." % (server)
-            return False
+        if("openvswitch" not in result):
+            error_message = "/etc/default/openvswitch doesn't exist on server %s." % (server)
+            print error_message
+            return False, error_message
 
-        if(self.verbose):
+        if self.verbose:
             print "Check status of nuage-openvsiwtch service on %s ..." % (server)
 
         cmd = "/bin/systemctl status openvswitch.service"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
-        if(not("status=0/SUCCESS" in result)):
-            print "openvswitch.service status failed on server %s." % (server)
-            return False
+        if("status=0/SUCCESS" not in result):
+            error_message = "openvswitch.service status failed on server %s." % (server)
+            return False, error_message
 
         return True
+
+    def install_rpm(self, server, ssh_session, isupgrade):
+        """Install or upgrade Nuage VRS rpms to the servers."""
+        print "Scp nuage VRS rpm packages to %s ..." % (server)
+        vrs_config = self.read_vrs_config()
+
+        scp_filename = ""
+        for rpm_name in vrs_config['rpm']:
+            scp_filename = scp_filename + rpm_name + " "
+        ssh_session.run_scp(scp_filename, "/root/")
+
+        print "Install nuage VRS rpm packages to %s ..." % (server)
+        cmd = ""
+        for rpm_name in vrs_config['rpm']:
+            cmd = cmd + "/root/" + rpm_name + " "
+        if self.verbose:
+            print cmd
+        if isupgrade:
+            ssh_session.run_ssh("rpm -Uvh " + cmd)
+        else:
+            ssh_session.run_ssh("rpm -ivh " + cmd)
 
     def install(self, server, cmd):
         """Install VRS to the servers."""
@@ -198,80 +222,85 @@ class DeployVRS(object):
                python-twisted-core perl-JSON qemu-kvm vconfig \
                perl-Sys-Syslog.x86_64 protobuf-c.x86_64 \
                python-setproctitle.x86_64"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         p.run_ssh(cmd)
 
-        print "Scp nuage VRS rpm packages to %s ..." % (server)
-        vrs_config = self.read_vrs_config()
-
-        scp_filename = ""
-        for rpm_name in vrs_config['rpm']:
-            scp_filename = scp_filename + rpm_name + " "
-        p.run_scp(scp_filename, "/root/")
-
-        print "Install nuage VRS rpm packages to %s ..." % (server)
-        cmd = ""
-        for rpm_name in vrs_config['rpm']:
-            cmd = cmd + "/root/" + rpm_name + " "
-        if(self.verbose):
-            print cmd
-        p.run_ssh("rpm -ivh " + cmd)
+        self.install_rpm(server, p, False)
 
         print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." % (server)
         cmd = "sed -i 's/\^ovs_bridge\.\*/ovs_bridge=alubr0/' /etc/nova/nova.conf"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         p.run_ssh(cmd)
+
+        vrs_config = self.read_vrs_config()
 
         print "Setting /etc/default/openvswitch config file on server %s..." % (server)
         cmd = "sed -i 's/\^NETWORK_UPLINK_INTF\.\*/NETWORK_UPLINK_INTF=%s/' /etc/default/openvswitch; \
                sed -i 's/\^ACTIVE_CONTROLLER\.\*/ACTIVE_CONTROLLER=%s/' /etc/default/openvswitch;\
-               sed -i 's/\^STANDBY_CONTROLLER\.\*/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch"\
+               sed -i 's/\^STANDBY_CONTROLLER\.\*/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch;\
+               sed -i 's/\^BRIDGE_MTU\.\*/BRIDGE_MTU=1600/' /etc/default/openvswitch;"\
                % (vrs_config['network_uplink_intf'], vrs_config['active_controller'], vrs_config['standby_controller'])
-        if(self.verbose):
+        if self.verbose:
             print cmd
         p.run_ssh(cmd)
 
         print "Restart nuage-openvsiwtch service on %s ..." % (server)
 
         cmd = "/bin/systemctl restart openvswitch.service"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         p.run_ssh(cmd)
 
         print "Check status of nuage-openvsiwtch service on %s ..." % (server)
         cmd = "/bin/systemctl status openvswitch.service"
-        if(self.verbose):
+        if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
         if("status=0/SUCCESS" in result):
-            return True
-        return False
+            return True, ""
+        return False, result
 
     def uninstall(self, server, cmd):
         """Uninstall VRS on the servers."""
         p = JsshProcess(server, "", self.verbose)
 
-        cli = "rpm -e nuage*"
-        if(self.verbose):
+        cli = "/bin/systemctl stop openvswitch.service"
+        if self.verbose:
             print cli
         p.run_ssh(cli)
-        return True
+
+        cli = "rpm -qa | grep nuage"
+        if self.verbose:
+            print cli
+        result = p.run_ssh(cli)
+        nuage_rpms = result.split('\r\n')
+        for rpms in nuage_rpms:
+            if "nuage" not in rpms:
+                pass
+            cli = "rpm -e " + rpms
+            if self.verbose:
+                print cli
+            p.run_ssh(cli)
+
+        return True, ""
 
     def upgrade(self, server, cmd):
         """Upgrate VRS on the servers."""
-        self.uninstall(server, cmd)
+        p = JsshProcess(server, "", self.verbose)
 
-        return self.install(server, cmd)
+        self.install_rpm(server, p, True)
+
+        return True, ""
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
         p = JsshProcess(server, cmd, self.verbose)
         p.start()
-        if(self.verbose):
+        if self.verbose:
             print "Spaw ssh command %s on server %s success." % (cmd, server)
-        return True
+        return True, ""
 
 
 def print_help():
@@ -302,24 +331,25 @@ def main():
             assert False, "unhandled option"
 
     deploy = DeployVRS("server.txt", verbose)
-    if(command == "install"):
+    if command == "install":
         func = deploy.install
-    elif(command == "uninstall"):
+    elif command == "uninstall":
         func = deploy.uninstall
-    elif(command == "upgrade"):
+    elif command == "upgrade":
         func = deploy.upgrade
-    elif(command == "check"):
+    elif command == "check":
         func = deploy.check
     else:
         func = deploy.exec_cmd
 
     servers = deploy.read_servers()
+    failed_servers = []
     for server in servers:
-        failed_servers = []
-        print "Exec %s command on server %s" % (command, server)
-        result = func(server, command)
-        if(not result):
-            failed_servers.append(server)
+        if verbose:
+            print "Exec %s command on server %s" % (command, server)
+        result, error_message = func(server, command)
+        if not result:
+            failed_servers.append(server.host + " " + error_message)
 
     for server in failed_servers:
         print "Execute command %s failed on server %s" % (command, server)
