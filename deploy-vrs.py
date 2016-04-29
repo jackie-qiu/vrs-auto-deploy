@@ -43,7 +43,7 @@ class Server(object):
         return self.host
 
 
-class JsshProcess(multiprocessing.Process):
+class JsshProcess(object):
 
     """Class that implements ssh to the KVM servers ."""
 
@@ -53,10 +53,6 @@ class JsshProcess(multiprocessing.Process):
         self.server = server
         self.cmd = cmd
         self.verbose = verbose
-
-    def run(self):
-        """Run cmd in async thread."""
-        return self.run_ssh(self.cmd)
 
     def run_ssh(self, cmd):
         """Run ssh command."""
@@ -83,7 +79,7 @@ class JsshProcess(multiprocessing.Process):
             return None
         child.expect(pexpect.EOF)
         if self.verbose:
-            print "Runing command %s on server %s with result %s." % (self.cmd, self.server, child.before)
+            print "Execute command %s on server %s with result %s." % (self.cmd, self.server, child.before)
 
         return child.before
 
@@ -191,7 +187,7 @@ class DeployVRS(object):
 
         return True
 
-    def install_rpm(self, server, ssh_session, isupgrade):
+    def __install_rpm(self, server, ssh_session, isupgrade):
         """Install or upgrade Nuage VRS rpms to the servers."""
         print "Scp nuage VRS rpm packages to %s ..." % (server)
         vrs_config = self.read_vrs_config()
@@ -226,7 +222,7 @@ class DeployVRS(object):
             print cmd
         p.run_ssh(cmd)
 
-        self.install_rpm(server, p, False)
+        self.__install_rpm(server, p, False)
 
         print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." % (server)
         cmd = "sed -i 's/\^ovs_bridge\.\*/ovs_bridge=alubr0/' /etc/nova/nova.conf"
@@ -303,22 +299,46 @@ class DeployVRS(object):
         """Upgrate VRS on the servers."""
         p = JsshProcess(server, "", self.verbose)
 
-        self.install_rpm(server, p, True)
+        self.__install_rpm(server, p, True)
 
         return True, ""
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
         p = JsshProcess(server, cmd, self.verbose)
-        p.start()
+        p.run_ssh(cmd)
         if self.verbose:
-            print "Spaw ssh command %s on server %s success." % (cmd, server)
+            print "Execute ssh command %s on server %s success." % (cmd, server)
         return True, ""
 
 
 def print_help():
     """Print help."""
     print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]]'
+
+
+def worker(func, server, command, queue):
+    """Multiprocessing worker."""
+    result, error_message = func(server, command)
+
+    queue.put(str(result) + "##!!" + server.host + " " + error_message)
+
+
+def collector(number_of_process, queue):
+    """Multiprocessing result collector."""
+    failed_servers = []
+    for i in range(number_of_process):
+        result = queue.get().split('##!!')
+        if(result[0] == 'False'):
+            failed_servers.append(result[1])
+
+    for server in failed_servers:
+        print "Execute command failed on server %s" % (server)
+
+    with open('failed_servers.txt', 'w') as f:
+        f.write('\n'.join(str(server)[:] for server in failed_servers))
+
+    f.close()
 
 
 def main():
@@ -356,21 +376,26 @@ def main():
         func = deploy.exec_cmd
 
     servers = deploy.read_servers()
-    failed_servers = []
+    record = []
+
+    queue = multiprocessing.Queue(100)
+
     for server in servers:
         if verbose:
-            print "Exec %s command on server %s" % (command, server)
-        result, error_message = func(server, command)
-        if not result:
-            failed_servers.append(server.host + " " + error_message)
+            print "Spawn process to execute %s command on server %s" % (command, server)
+        worker_process = multiprocessing.Process(target=worker, args=(func, server, command, queue))
+        worker_process.start()
+        record.append(worker_process)
 
-    for server in failed_servers:
-        print "Execute command %s failed on server %s" % (command, server)
+    collector_process = multiprocessing.Process(target=collector, args=(len(record), queue))
+    collector_process.start()
 
-    with open('failed_servers.txt', 'w') as f:
-        f.write('\n'.join(str(server)[:] for server in failed_servers))
+    for worker_process in record:
+        worker_process.join()
 
-    f.close()
+    queue.close()
+
+    collector_process.join()
 
 
 if __name__ == "__main__":
