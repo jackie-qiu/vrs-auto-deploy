@@ -199,7 +199,7 @@ class DeployVRS(object):
 
         return True, ""
 
-    def install_rpm(self, server, ssh_session, isupgrade):
+    def __install_rpm(self, server, ssh_session, isupgrade):
         """Install or upgrade Nuage VRS rpms to the servers."""
         print "Scp nuage VRS rpm packages to %s ..." % (server)
         vrs_config = self.read_vrs_config()
