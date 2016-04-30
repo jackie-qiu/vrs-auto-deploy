@@ -49,7 +49,6 @@ class JsshProcess(object):
 
     def __init__(self, server, cmd, verbose):
         """Constructor."""
-        multiprocessing.Process.__init__(self)
         self.server = server
         self.cmd = cmd
         self.verbose = verbose
@@ -184,7 +183,7 @@ class DeployVRS(object):
         if("status=0/SUCCESS" not in result):
             error_message = "openvswitch.service status failed on server %s." % (server)
             return False, error_message
-
+        print "Execute VRS status checking on server %s success." % (server)
         return True
 
     def __install_rpm(self, server, ssh_session, isupgrade):
@@ -262,6 +261,7 @@ class DeployVRS(object):
             print cmd
         result = p.run_ssh(cmd)
         if "status=0/SUCCESS" in result:
+            print "Execute VRS install on server %s success." % (server)
             return True, ""
         return False, result
 
@@ -293,6 +293,7 @@ class DeployVRS(object):
                 print cli
             p.run_ssh(cli)
 
+        print "Execute VRS uninstall on server %s success." % (server)
         return True, ""
 
     def upgrade(self, server, cmd):
@@ -301,14 +302,15 @@ class DeployVRS(object):
 
         self.__install_rpm(server, p, True)
 
+        print "Execute VRS upgrade on server %s success." % (server)
+
         return True, ""
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
         p = JsshProcess(server, cmd, self.verbose)
         p.run_ssh(cmd)
-        if self.verbose:
-            print "Execute ssh command %s on server %s success." % (cmd, server)
+        print "Execute ssh command %s on server %s success." % (cmd, server)
         return True, ""
 
 
