@@ -242,6 +242,12 @@ class DeployVRS(object):
         vrs_config = self.read_vrs_config()
 
         print "Setting /etc/default/openvswitch config file on server %s..." % (server)
+        if self.is_vrs_g:
+            cmd = "sed -i 's/\^PERSONALITY\.\*/PERSONALITY=vrs-g/' /etc/default/openvswitch"
+            if self.verbose:
+                print cmd
+            p.run_ssh(cmd)
+
         cmd = "sed -i 's/\^NETWORK_UPLINK_INTF\.\*/NETWORK_UPLINK_INTF=%s/' /etc/default/openvswitch; \
                sed -i 's/^.*ACTIVE_CONTROLLER=.*$/ACTIVE_CONTROLLER=%s/' /etc/default/openvswitch;\
                sed -i 's/^.*STANDBY_CONTROLLER=.*$/STANDBY_CONTROLLER=%s/' /etc/default/openvswitch;\
