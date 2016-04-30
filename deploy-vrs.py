@@ -63,10 +63,10 @@ class JsshProcess(multiprocessing.Process):
         cli = self.server.user_name + "@" + self.server.host + " " + cmd
         child = pexpect.spawn('ssh %s' % cli)
         # child.logfile_send = sys.stdout
-        index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
+        index = child.expect(pattern=[".*yes/no.*", ".*ssword:", pexpect.TIMEOUT], timeout=30)
         if index == 0:
             child.sendline('yes')
-            i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
+            i = child.expect(pattern=[pexpect.TIMEOUT, '.*ssword:'], timeout=30)
             if i == 0:
                 print 'ERROR!'
                 print 'SSH could not login. Here is what SSH said:'
@@ -81,7 +81,7 @@ class JsshProcess(multiprocessing.Process):
             print 'SSH could not login. Here is what SSH said:'
             print child.before, child.after
             return None
-        child.expect(pexpect.EOF)
+        child.expect(pattern=pexpect.EOF, timeout=300)
         if self.verbose:
             print "Runing command %s on server %s with result %s." % (self.cmd, self.server, child.before)
 
@@ -124,18 +124,20 @@ class DeployVRS(object):
 
     """Class that implements deployment of VRS on KVM servers ."""
 
-    def __init__(self, config_file, verbose):
+    def __init__(self, config_file, servers_file, verbose, is_vrs_g):
         """Constructor."""
         super(DeployVRS, self).__init__()
         self.config_file = config_file
+        self.servers_file = servers_file
         self.verbose = verbose
+        self.is_vrs_g = is_vrs_g
 
     def _parse_config(self, conf):
         return Server()
 
     def read_vrs_config(self):
         """Read the VRS configuration from the json file."""
-        with open("config.json") as json_file:
+        with open(self.config_file) as json_file:
             json_data = json.load(json_file)
 
         return json_data
@@ -143,7 +145,7 @@ class DeployVRS(object):
     def read_servers(self):
         """Read the servers from the file."""
         servers = []
-        with open(self.config_file) as f:
+        with open(self.servers_file) as f:
             for line in f:
                 info = line.split(':')
                 server = Server(info[0], info[1], info[2])
@@ -154,17 +156,18 @@ class DeployVRS(object):
     def check(self, server, cmd):
         """Check the Nuage VRS status of the server."""
         p = JsshProcess(server, "", self.verbose)
-        if self.verbose:
-            print "Check status of file /etc/nova/nova.conf on %s." % (server)
+        if not self.is_vrs_g:
+            if self.verbose:
+                print "Check status of file /etc/nova/nova.conf on %s." % (server)
 
-        cmd = "ls /etc/nova/nova.conf"
-        if self.verbose:
-            print cmd
-        result = p.run_ssh(cmd)
-        if "nova.conf" not in result:
-            error_message = "/etc/nova/nova.conf doesn't exist on server %s." % (server)
-            print error_message
-            return False, error_message
+            cmd = "ls /etc/nova/nova.conf"
+            if self.verbose:
+                print cmd
+            result = p.run_ssh(cmd)
+            if "cannot access" not in result:
+                error_message = "/etc/nova/nova.conf doesn't exist on server %s." % (server)
+                print error_message
+                return False, error_message
 
         if self.verbose:
             print "Check status of file /etc/default/openvswitch on %s." % (server)
@@ -173,7 +176,7 @@ class DeployVRS(object):
         if self.verbose:
             print cmd
         result = p.run_ssh(cmd)
-        if("openvswitch" not in result):
+        if("cannot access" in result):
             error_message = "/etc/default/openvswitch doesn't exist on server %s." % (server)
             print error_message
             return False, error_message
@@ -189,7 +192,12 @@ class DeployVRS(object):
             error_message = "openvswitch.service status failed on server %s." % (server)
             return False, error_message
 
-        return True
+        if not self.is_vrs_g:
+            print "Execute VRS status checking on server %s success." % (server)
+        else:
+            print "Execute VRS-G status checking on server %s success." % (server)
+
+        return True, ""
 
     def install_rpm(self, server, ssh_session, isupgrade):
         """Install or upgrade Nuage VRS rpms to the servers."""
@@ -200,8 +208,11 @@ class DeployVRS(object):
         for rpm_name in vrs_config['rpm']:
             scp_filename = scp_filename + rpm_name + " "
         ssh_session.run_scp(scp_filename, "/root/")
+        if not self.is_vrs_g:
+            print "Install nuage VRS rpm packages to %s ..." % (server)
+        else:
+            print "Install nuage VRS-G rpm packages to %s ..." % (server)
 
-        print "Install nuage VRS rpm packages to %s ..." % (server)
         cmd = ""
         for rpm_name in vrs_config['rpm']:
             cmd = cmd + "/root/" + rpm_name + " "
@@ -226,13 +237,13 @@ class DeployVRS(object):
             print cmd
         p.run_ssh(cmd)
 
-        self.install_rpm(server, p, False)
-
-        print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." % (server)
-        cmd = "sed -i 's/\^ovs_bridge\.\*/ovs_bridge=alubr0/' /etc/nova/nova.conf"
-        if self.verbose:
-            print cmd
-        p.run_ssh(cmd)
+        self.__install_rpm(server, p, False)
+        if not self.is_vrs_g:
+            print "Setting ovs_bridge to alubr0 in nova.conf on server %s..." % (server)
+            cmd = "sed -i 's/\^ovs_bridge\.\*/ovs_bridge=alubr0/' /etc/nova/nova.conf"
+            if self.verbose:
+                print cmd
+            p.run_ssh(cmd)
 
         vrs_config = self.read_vrs_config()
 
@@ -246,12 +257,13 @@ class DeployVRS(object):
             print cmd
         p.run_ssh(cmd)
 
-        print "Restart openstack-nova-compute service on %s ..." % (server)
+        if not self.is_vrs_g:
+            print "Restart openstack-nova-compute service on %s ..." % (server)
 
-        cmd = "/bin/systemctl restart openstack-nova-compute.service"
-        if self.verbose:
-            print cmd
-        p.run_ssh(cmd)
+            cmd = "/bin/systemctl restart openstack-nova-compute.service"
+            if self.verbose:
+                print cmd
+            p.run_ssh(cmd)
 
         print "Restart nuage-openvsiwtch service on %s ..." % (server)
 
@@ -266,6 +278,10 @@ class DeployVRS(object):
             print cmd
         result = p.run_ssh(cmd)
         if "status=0/SUCCESS" in result:
+            if not self.is_vrs_g:
+                print "Execute VRS install on server %s success." % (server)
+            else:
+                print "Execute VRS-G install on server %s success." % (server)
             return True, ""
         return False, result
 
@@ -297,13 +313,22 @@ class DeployVRS(object):
                 print cli
             p.run_ssh(cli)
 
+        if not self.is_vrs_g:
+            print "Execute VRS uninstall on server %s success." % (server)
+        else:
+            print "Execute VRS-G uninstall on server %s success." % (server)
+
         return True, ""
 
     def upgrade(self, server, cmd):
         """Upgrate VRS on the servers."""
         p = JsshProcess(server, "", self.verbose)
 
-        self.install_rpm(server, p, True)
+        self.__install_rpm(server, p, True)
+        if not self.is_vrs_g:
+            print "Execute VRS upgrade on server %s success." % (server)
+        else:
+            print "Execute VRS-G upgrade on server %s success." % (server)
 
         return True, ""
 
@@ -318,32 +343,38 @@ class DeployVRS(object):
 
 def print_help():
     """Print help."""
-    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]]'
+    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]] {-g -v}'
 
 
 def main():
     """Main entry."""
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hc:v", ["command="])
+        opts, args = getopt.getopt(sys.argv[1:], "hc:f:vg", ["command=", "config=", "vrsg="])
     except getopt.GetoptError, err:
         print str(err)
         print_help()
         sys.exit(2)
 
     verbose = False
+    is_vrs_g = False
     command = None
+    config_file = None
     for opt, arg in opts:
         if opt == "-v":
             verbose = True
         elif opt in ("-c", "--command"):
             command = arg
+        elif opt in ("-f", "--config"):
+            config_file = arg
+        elif opt in ("-g", "--vrsg"):
+            is_vrs_g = True
         elif opt in ("-h", "--help"):
             print_help()
             sys.exit()
         else:
             assert False, "unhandled option"
 
-    deploy = DeployVRS("server.txt", verbose)
+    deploy = DeployVRS(config_file, "server.txt", verbose, is_vrs_g)
     if command == "install":
         func = deploy.install
     elif command == "uninstall":

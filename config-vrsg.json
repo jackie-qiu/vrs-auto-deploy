@@ -1,0 +1,9 @@
+{
+    "active_controller": "10.0.6.68",
+    "standby_controller": "10.0.6.69",
+    "network_uplink_intf": "bond1.3905",
+    "rpm":
+    [
+        "nuage-openvswitch-3.2.6-232.el7.x86_64.rpm"
+    ]
+}
