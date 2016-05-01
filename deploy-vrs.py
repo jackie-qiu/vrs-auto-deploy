@@ -169,7 +169,7 @@ class DeployVRS(object):
             if self.verbose:
                 print cmd
             result = p.run_ssh(cmd)
-            if "cannot access" not in result:
+            if "cannot access" in result:
                 error_message = "/etc/nova/nova.conf doesn't exist on server %s." % (server)
                 print error_message
                 return False, error_message
