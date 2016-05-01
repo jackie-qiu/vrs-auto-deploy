@@ -53,6 +53,23 @@ class JsshProcess(object):
         self.cmd = cmd
         self.verbose = verbose
 
+    def __ssh_failed(self, child):
+        print 'ERROR!'
+        print 'SSH could not login. Here is what SSH said:'
+        print child.before, child.after
+        return child.before
+
+    def __ssh_send_password(self, child):
+        child.sendline(self.server.password)
+        index = child.expect(pattern=[pexpect.TIMEOUT, 'Permission denied.*', pexpect.EOF], timeout=300)
+        if index == 0:
+            return False, self.__ssh_failed(child)
+        elif index == 1:
+            print "Incorrect password on the server %s" % (self.server.host)
+            return False, "Incorrect password on the server %s" % (self.server.host)
+        else:
+            return True, child.before
+
     def run_ssh(self, cmd):
         """Run ssh command."""
         cli = self.server.user_name + "@" + self.server.host + " " + cmd
@@ -63,24 +80,18 @@ class JsshProcess(object):
             child.sendline('yes')
             i = child.expect(pattern=[pexpect.TIMEOUT, '.*ssword:'], timeout=30)
             if i == 0:
-                print 'ERROR!'
-                print 'SSH could not login. Here is what SSH said:'
-                print child.before, child.after
-                return None
+                return self.__ssh_failed(child)
             else:
-                child.sendline(self.server.password)
+                success, result = self.__ssh_send_password(child)
         elif index == 1:
-            child.sendline(self.server.password)
+            success, result = self.__ssh_send_password(child)
         else:
-            print 'ERROR!'
-            print 'SSH could not login. Here is what SSH said:'
-            print child.before, child.after
-            return None
-        child.expect(pattern=pexpect.EOF, timeout=300)
+            return self.__ssh_failed(child)
+        # child.expect(pattern=pexpect.EOF, timeout=300)
         if self.verbose:
-            print "Execute command %s on server %s with result %s." % (self.cmd, self.server, child.before)
+            print "Runing command %s on server %s with result %s." % (self.cmd, self.server, result)
 
-        return child.before
+        return result
 
     def run_scp(self, filename, path):
         """Run scp command."""
@@ -95,24 +106,18 @@ class JsshProcess(object):
             child.sendline('yes')
             i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
             if i == 0:
-                print 'ERROR!'
-                print 'SCP could not login. Here is what SCP said:'
-                print child.before, child.after
-                return None
+                return self.__ssh_failed(child)
             else:
-                child.sendline(self.server.password)
+                success, result = self.__ssh_send_password(child)
         elif index == 1:
-            child.sendline(self.server.password)
+            success, result = self.__ssh_send_password(child)
         else:
-            print 'ERROR!'
-            print 'SCP could not login. Here is what SCP said:'
-            print child.before, child.after
-            return None
-        child.expect(pexpect.EOF)
+            return self.__ssh_failed()
+        # child.expect(pexpect.EOF)
         if self.verbose:
             print child.before
 
-        return child.before
+        return result
 
 
 class DeployVRS(object):
@@ -186,6 +191,7 @@ class DeployVRS(object):
         if("status=0/SUCCESS" not in result):
             error_message = "openvswitch.service status failed on server %s." % (server)
             return False, error_message
+
         if not self.is_vrs_g:
             print "Execute VRS status checking on server %s success." % (server)
         else:
@@ -317,6 +323,7 @@ class DeployVRS(object):
             print "Execute VRS uninstall on server %s success." % (server)
         else:
             print "Execute VRS-G uninstall on server %s success." % (server)
+
         return True, ""
 
     def upgrade(self, server, cmd):
@@ -341,7 +348,7 @@ class DeployVRS(object):
 
 def print_help():
     """Print help."""
-    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]] {-g -v}'
+    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]] {-f -g -v}'
 
 
 def worker(func, server, command, queue):
