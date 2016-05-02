@@ -368,7 +368,7 @@ Commands:
   upgrade                     upgrade Nuage Openvswitch rpms on the servers in the server.txt
   cli                         execute any linux command on the servers in the server.txt
   check                       check /etc/nova/nova.conf, /etc/default/openvswitch and openvswitch.service
-                              status on the on the servers in the server.txt
+                              status on the servers in the server.txt
 
 
 Options:
