@@ -359,10 +359,30 @@ class DeployVRS(object):
         print "Execute ssh command %s on server %s success." % (cmd, server)
         return True, ""
 
+help_str = """Nuage VRS deployment utility on RHEL7/Centos7
+usage: python deploy-vrs.py [-c|--command] [install|uninstall|upgrade|cli|check] [OPTIONS]
+Insert server informatiion into server.txt as the format "IP:USERNAME:PASSWORD"
+Commands:
+  install                     install Nuage Openvswitch rpms on the servers in the server.txt
+  uninstall                   remove Nuage Openvswitch rpms from the servers in the server.txt
+  upgrade                     upgrade Nuage Openvswitch rpms on the servers in the server.txt
+  cli                         execute any linux command on the servers in the server.txt
+  check                       check /etc/nova/nova.conf, /etc/default/openvswitch and openvswitch.service
+                              status on the on the servers in the server.txt
+
+
+Options:
+  [-f|--config]               path of the json file which configure the VSC ip address and Nuage Openvswitch
+                              rpm package name
+  [-g|--vrsg]                 install the Nuage VRS-G
+  [-v]                        display verbose
+  [-h|--help]                 display this help message
+"""
+
 
 def print_help():
     """Print help."""
-    print sys.argv[0] + ' -c [install|uninstall|upgrade|exec|check]] {-f -g -v}'
+    print help_str
 
 
 def worker(func, server, command, queue):
