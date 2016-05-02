@@ -331,12 +331,26 @@ class DeployVRS(object):
         p = JsshProcess(server, "", self.verbose)
 
         self.__install_rpm(server, p, True)
-        if not self.is_vrs_g:
-            print "Execute VRS upgrade on server %s success." % (server)
-        else:
-            print "Execute VRS-G upgrade on server %s success." % (server)
 
-        return True, ""
+        print "Restart nuage-openvsiwtch service on %s ..." % (server)
+
+        cmd = "/bin/systemctl restart openvswitch.service"
+        if self.verbose:
+            print cmd
+        p.run_ssh(cmd)
+
+        print "Check status of nuage-openvsiwtch service on %s ..." % (server)
+        cmd = "/bin/systemctl status openvswitch.service"
+        if self.verbose:
+            print cmd
+        result = p.run_ssh(cmd)
+        if "status=0/SUCCESS" in result:
+            if not self.is_vrs_g:
+                print "Execute VRS install on server %s success." % (server)
+            else:
+                print "Execute VRS-G install on server %s success." % (server)
+            return True, ""
+        return False, result
 
     def exec_cmd(self, server, cmd):
         """Exec command on the servers."""
