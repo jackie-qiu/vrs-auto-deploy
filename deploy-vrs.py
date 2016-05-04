@@ -70,12 +70,14 @@ class JsshProcess(object):
         else:
             return True, child.before
 
-    def __ssh_send_cli(self, child):
+    def __ssh_send_cli(self, cli):
+        child = pexpect.spawn(cli)
+        # child.logfile_send = sys.stdout
         index = child.expect(pattern=[".*ssword:", pexpect.TIMEOUT, pexpect.EOF], timeout=300)
         if index == 0:
             success, result = self.__ssh_send_password(child)
         elif index == 1:
-            return self.__ssh_failed(child)
+            return False, self.__ssh_failed(child)
         else:
             success = True
             result = child.before
@@ -84,12 +86,11 @@ class JsshProcess(object):
     def run_ssh(self, cmd):
         """Run ssh command."""
         cli = self.server.user_name + "@" + self.server.host + " " + cmd
+        cli = "ssh -o StrictHostKeyChecking=no " + cli
         if self.verbose:
             print cli
-        child = pexpect.spawn('ssh -o StrictHostKeyChecking=no %s' % cli)
-        # child.logfile_send = sys.stdout
-        success, result = self.__ssh_send_cli(child)
-        # child.expect(pattern=pexpect.EOF, timeout=300)
+        success, result = self.__ssh_send_cli(cli)
+
         if self.verbose:
             print "Runing command %s on server %s with result %s." % (self.cmd, self.server, result)
 
@@ -102,11 +103,9 @@ class JsshProcess(object):
         if self.verbose:
             print cli
 
-        child = pexpect.spawn(cli)
-        success, result = self.__ssh_send_cli(child)
-        # child.expect(pexpect.EOF)
+        success, result = self.__ssh_send_cli(cli)
         if self.verbose:
-            print child.before
+            print result
 
         return result
 
