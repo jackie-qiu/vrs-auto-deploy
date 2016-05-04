@@ -75,23 +75,25 @@ class JsshProcess(multiprocessing.Process):
         else:
             return True, child.before
 
+    def __ssh_send_cli(self, child):
+        index = child.expect(pattern=[".*ssword:", pexpect.TIMEOUT, pexpect.EOF], timeout=300)
+        if index == 0:
+            success, result = self.__ssh_send_password(child)
+        elif index == 1:
+            return self.__ssh_failed(child)
+        else:
+            success = True
+            result = child.before
+        return success, result
+
     def run_ssh(self, cmd):
         """Run ssh command."""
         cli = self.server.user_name + "@" + self.server.host + " " + cmd
-        child = pexpect.spawn('ssh %s' % cli)
+        if self.verbose:
+            print cli
+        child = pexpect.spawn('ssh -o StrictHostKeyChecking=no %s' % cli)
         # child.logfile_send = sys.stdout
-        index = child.expect(pattern=[".*yes/no.*", ".*ssword:", pexpect.TIMEOUT], timeout=30)
-        if index == 0:
-            child.sendline('yes')
-            i = child.expect(pattern=[pexpect.TIMEOUT, '.*ssword:'], timeout=30)
-            if i == 0:
-                return self.__ssh_failed(child)
-            else:
-                success, result = self.__ssh_send_password(child)
-        elif index == 1:
-            success, result = self.__ssh_send_password(child)
-        else:
-            return self.__ssh_failed(child)
+        success, result = self.__ssh_send_cli(child)
         # child.expect(pattern=pexpect.EOF, timeout=300)
         if self.verbose:
             print "Runing command %s on server %s with result %s." % (self.cmd, self.server, result)
@@ -101,23 +103,12 @@ class JsshProcess(multiprocessing.Process):
     def run_scp(self, filename, path):
         """Run scp command."""
         dst = self.server.user_name + "@" + self.server.host + ":" + path
-        cli = "scp " + filename + " " + dst
+        cli = "scp -o StrictHostKeyChecking=no " + filename + " " + dst
         if self.verbose:
             print cli
 
         child = pexpect.spawn(cli)
-        index = child.expect([".*yes/no.*", ".*ssword:", pexpect.TIMEOUT])
-        if index == 0:
-            child.sendline('yes')
-            i = child.expect([pexpect.TIMEOUT, '.*ssword:'])
-            if i == 0:
-                return self.__ssh_failed(child)
-            else:
-                success, result = self.__ssh_send_password(child)
-        elif index == 1:
-            success, result = self.__ssh_send_password(child)
-        else:
-            return self.__ssh_failed()
+        success, result = self.__ssh_send_cli(child)
         # child.expect(pexpect.EOF)
         if self.verbose:
             print child.before
