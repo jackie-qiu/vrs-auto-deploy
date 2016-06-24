@@ -92,7 +92,7 @@ class JsshProcess(object):
         success, result = self.__ssh_send_cli(cli)
 
         if self.verbose:
-            print "Runing command %s on server %s with result %s." % (self.cmd, self.server, result)
+            print "Runing command %s on server %s with result %s." % (cmd, self.server, result)
 
         return result
 
