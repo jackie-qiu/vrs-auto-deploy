@@ -35,12 +35,12 @@ def config_bond204(server, ip):
 
 if __name__ == "__main__":
 
-    bond101_ips = []
-    bond101_gateway = "10.32.65.254"
+    bond201_ips = []
+    bond201_gateway = "10.32.65.254"
 
     for i in range(1, 250):
         ip = "10.32.65.%s" % (i)
-        bond101_ips.append(ip)
+        bond201_ips.append(ip)
 
     bond204_ips = []
 
@@ -53,6 +53,6 @@ if __name__ == "__main__":
 
     i = 0
     for server in servers:
-        config_bond201(server, bond101_ips[i], bond101_gateway)
+        config_bond201(server, bond201_ips[i], bond201_gateway)
         config_bond204(server, bond204_ips[i])
         i = i + 1
