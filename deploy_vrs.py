@@ -350,7 +350,7 @@ class DeployVRS(object):
         return True, ""
 
 help_str = """Nuage VRS deployment utility on RHEL7/Centos7
-usage: python deploy-vrs.py [-c|--command] [install|uninstall|upgrade|cli|check] [OPTIONS]
+usage: python deploy_vrs.py [-c|--command] [install|uninstall|upgrade|cli|check] [OPTIONS]
 Insert server informatiion into server.txt as the format "IP:USERNAME:PASSWORD"
 Commands:
   install                     install Nuage Openvswitch rpms on the servers in the server.txt
