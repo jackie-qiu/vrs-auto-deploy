@@ -349,8 +349,15 @@ class DeployVRS(object):
         print "Execute ssh command %s on server %s success." % (cmd, server)
         return True, ""
 
+    def scp_cmd(self, server, filename, path):
+        """Scp file to the servers."""
+        p = JsshProcess(server, "", self.verbose)
+        p.run_scp(filename, path)
+        print "Execute scp command %s to server %s %s success." % (filename, server, path)
+        return True, ""
+
 help_str = """Nuage VRS deployment utility on RHEL7/Centos7
-usage: python deploy_vrs.py [-c|--command] [install|uninstall|upgrade|cli|check] [OPTIONS]
+usage: python deploy_vrs.py [-c|--command] [install|uninstall|upgrade|cli|check|scp] [OPTIONS]
 Insert server informatiion into server.txt as the format "IP:USERNAME:PASSWORD"
 Commands:
   install                     install Nuage Openvswitch rpms on the servers in the server.txt
@@ -359,6 +366,7 @@ Commands:
   cli                         execute any linux command on the servers in the server.txt
   check                       check /etc/nova/nova.conf, /etc/default/openvswitch and openvswitch.service
                               status on the servers in the server.txt
+  scp                         scp the specific file to ther servers in the server.txt
 
 
 Options:
@@ -421,6 +429,8 @@ def main():
             config_file = arg
         elif opt in ("-g", "--vrsg"):
             is_vrs_g = True
+        elif opt in ("-p", "--path"):
+            dst_path = arg
         elif opt in ("-h", "--help"):
             print_help()
             sys.exit()
@@ -441,6 +451,11 @@ def main():
 
     servers = deploy.read_servers()
     record = []
+
+    if command == "scp":
+        for server in servers:
+            deploy.scp_cmd(server, config_file, dst_path)
+        return
 
     queue = multiprocessing.Queue(100)
 
