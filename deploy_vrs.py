@@ -371,7 +371,7 @@ Commands:
 
 Options:
   [-f|--config]               path of the json file which configure the VSC ip address and Nuage Openvswitch
-                              rpm package name
+                              rpm package name or the filename if the command is scp
   [-g|--vrsg]                 install the Nuage VRS-G
   [-v]                        display verbose
   [-h|--help]                 display this help message
@@ -410,7 +410,7 @@ def collector(number_of_process, queue):
 def main():
     """Main entry."""
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hc:f:vg", ["command=", "config=", "vrsg="])
+        opts, args = getopt.getopt(sys.argv[1:], "hc:f:pvg", ["command=", "config=", "vrsg=", "path="])
     except getopt.GetoptError, err:
         print str(err)
         print_help()
